@@ -1,4 +1,12 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- device_calendar requires the calendar permission GROUP. Aria only ever
+         CREATES / UPDATES reminder events (set_/update_budget_reminder) — it
+         never reads the user's events (no retrieveEvents) and never deletes
+         (no delete tool, by design; CLAUDE.md / STORYLINE Beat 4). READ_CALENDAR
+         is declared only because the plugin's retrieveCalendars/createOrUpdate
+         APIs require the group. -->
+    <uses-permission android:name="android.permission.READ_CALENDAR" />
+    <uses-permission android:name="android.permission.WRITE_CALENDAR" />
     <application
         android:label="finance_ai_assistant"
         android:name="${applicationName}"

@@ -37,6 +37,9 @@ dependencies:
   # Device / storage
   sqflite: ^2.4.0
   device_calendar: ^4.3.0
+  # TZDateTime + timezone DB for device_calendar event times (transitive via
+  # device_calendar, declared directly so we can import it without a lint).
+  timezone: ^0.9.4
   path: ^1.9.0
 
   # Logging

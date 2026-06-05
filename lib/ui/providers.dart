@@ -19,10 +19,11 @@ final transactionRepoProvider = Provider<TransactionRepo>((ref) {
 });
 
 /// Reminder calendar. Create/update reminder events only — never read the user
-/// calendar, never delete. Step 4 uses the in-memory implementation; step 8
-/// swaps in a device_calendar-backed one behind the same interface.
+/// calendar, never delete. Step 8 wires the real device_calendar-backed
+/// implementation (the Beat 2 money shot); the in-memory one stays available for
+/// host tests / scripted mode behind the same [CalendarService] interface.
 final calendarServiceProvider = Provider<CalendarService>((ref) {
-  return InMemoryCalendarService();
+  return DeviceCalendarService();
 });
 
 /// Stage 1 — the LangChain agent. A single instance so conversation memory
