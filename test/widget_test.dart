@@ -1,19 +1,18 @@
-// Smoke widget test for build step 1.
-//
-// This only verifies the app shell builds and the smoke-test screen renders its
-// Run button. The actual two-stage Gemini calls are device-only (Firebase needs
-// platform channels + network) and cannot run under `flutter test`.
+// Smoke widget test for the app shell. Verifies the agent-probe screen (the
+// current dev home) renders its controls. No agent turn runs on build, so this
+// needs no Firebase — the Gemini path is exercised on-device.
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:finance_ai_assistant/main.dart';
 
 void main() {
-  testWidgets('Smoke test screen renders its Run button', (tester) async {
-    await tester.pumpWidget(const AriaSmokeApp());
+  testWidgets('Agent probe screen renders its controls', (tester) async {
+    await tester.pumpWidget(const ProviderScope(child: AriaSmokeApp()));
 
-    expect(find.text('Run smoke test'), findsOneWidget);
-    expect(find.text('Stage 1 · langchain_firebase'), findsOneWidget);
-    expect(find.text('Stage 2 · firebase_ai'), findsOneWidget);
+    expect(find.text('Run turn'), findsOneWidget);
+    expect(find.text('Beat 1 · spend'), findsOneWidget);
+    expect(find.text('Beat 4 · safety'), findsOneWidget);
   });
 }
