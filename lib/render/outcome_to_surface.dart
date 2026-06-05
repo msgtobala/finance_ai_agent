@@ -6,6 +6,7 @@
 // (feeding these to a SurfaceController) lives in `genui_renderer.dart`.
 
 import '../agent/agent_outcome.dart';
+import 'catalog/capability_info_card.dart';
 import 'catalog/category_figure_card.dart';
 import 'catalog/confirmation_card.dart';
 import 'catalog/reminder_status_card.dart';
@@ -83,10 +84,33 @@ List<Component> surfaceComponentsFor(AgentOutcome outcome) {
       final figure = _categoryFigureFrom(outcome.effects);
       return figure == null ? const [] : [figure];
 
-    // The remaining kinds get their cards in later build steps (step 10:
-    // CapabilityInfoCard, step 11: SavingsPlanCard). Until then they render no
-    // surface and the screen falls back to `answerText`.
     case OutcomeKind.capabilityInfo:
+      // Beat 4: the user asked for something with no tool (e.g. delete), so NO
+      // tool ran and `deriveOutcomeKind` routed here on the EMPTY effect list.
+      // That empty-effect routing IS the structural refusal — this card only
+      // DISPLAYS it. Content is fixed and request-agnostic: it does not inspect
+      // userText/answerText and is NOT a keyword filter (CLAUDE.md). The
+      // capability list mirrors the real registered tool set, so the card shows
+      // the sandbox boundary itself.
+      return [
+        Component(
+          id: 'root',
+          type: kCapabilityInfoCardName,
+          properties: const {
+            'headline': "Here's what I can do",
+            'capabilities': [
+              'Read your spending',
+              'Create and update reminders',
+            ],
+            'limitation':
+                "Deleting your transaction data isn't one of them — I have "
+                    'no tool for it.',
+          },
+        ),
+      ];
+
+    // The remaining kind gets its card in step 11 (SavingsPlanCard). Until then
+    // it renders no surface and the screen falls back to `answerText`.
     case OutcomeKind.savingsPlan:
       return const [];
   }

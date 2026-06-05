@@ -3,11 +3,13 @@
 // Built on genui's `BasicCatalogItems` (the installed 0.9.2 name; NOT
 // `CoreCatalogItems`) plus our custom cards. Steps 6–7 add the Beat 1
 // `spendingSummaryCard` and the Beat 2 `confirmationCard` + `reminderStatusCard`;
-// step 9 adds the Beat 3 `categoryFigureCard`. The remaining cards (capability
-// info, savings plan) land in later steps via the same `copyWith`.
+// step 9 adds the Beat 3 `categoryFigureCard`; step 10 adds the Beat 4
+// `capabilityInfoCard`. The remaining card (savings plan) lands in step 11 via the
+// same `copyWith`.
 
 import 'package:genui/genui.dart';
 
+import 'capability_info_card.dart';
 import 'category_figure_card.dart';
 import 'confirmation_card.dart';
 import 'reminder_status_card.dart';
@@ -25,5 +27,6 @@ final Catalog ariaCatalog = BasicCatalogItems.asCatalog().copyWith(
     confirmationCard,
     reminderStatusCard,
     categoryFigureCard,
+    capabilityInfoCard,
   ],
 );

@@ -2,6 +2,7 @@
 // no Firebase, no rendering.
 
 import 'package:finance_ai_assistant/agent/agent_outcome.dart';
+import 'package:finance_ai_assistant/render/catalog/capability_info_card.dart';
 import 'package:finance_ai_assistant/render/catalog/category_figure_card.dart';
 import 'package:finance_ai_assistant/render/catalog/confirmation_card.dart';
 import 'package:finance_ai_assistant/render/catalog/reminder_status_card.dart';
@@ -225,20 +226,36 @@ void main() {
     expect(components[1].properties['count'], 6);
   });
 
-  test('kinds without a card yet -> no components', () {
-    for (final kind in [
-      OutcomeKind.capabilityInfo,
-      OutcomeKind.savingsPlan,
-    ]) {
-      final outcome = AgentOutcome(
-        userText: '',
-        answerText: 'x',
-        steps: const [],
-        effects: const [],
-        kind: kind,
-      );
-      expect(surfaceComponentsFor(outcome), isEmpty,
-          reason: '$kind should not render a surface yet');
-    }
+  test('capabilityInfo (Beat 4, empty effects) -> one calm CapabilityInfoCard', () {
+    // The structural refusal: no delete tool ran, so effects is empty. The card
+    // content is deterministic and request-agnostic (no userText inspection).
+    final outcome = AgentOutcome(
+      userText: 'Delete all my transactions.',
+      answerText: '',
+      steps: const [],
+      effects: const [],
+      kind: OutcomeKind.capabilityInfo,
+    );
+
+    final root = surfaceComponentsFor(outcome).single;
+    expect(root.type, kCapabilityInfoCardName);
+    expect(root.properties['headline'], "Here's what I can do");
+    final capabilities =
+        (root.properties['capabilities'] as List).cast<String>();
+    expect(capabilities, hasLength(2));
+    expect(capabilities, contains('Read your spending'));
+    expect(capabilities, contains('Create and update reminders'));
+    expect(root.properties['limitation'], isNotNull);
+  });
+
+  test('savingsPlan (no card yet) -> no components', () {
+    final outcome = AgentOutcome(
+      userText: '',
+      answerText: 'x',
+      steps: const [],
+      effects: const [],
+      kind: OutcomeKind.savingsPlan,
+    );
+    expect(surfaceComponentsFor(outcome), isEmpty);
   });
 }

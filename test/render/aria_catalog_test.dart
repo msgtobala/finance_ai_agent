@@ -8,6 +8,7 @@
 
 import 'package:finance_ai_assistant/agent/agent_outcome.dart';
 import 'package:finance_ai_assistant/render/catalog/aria_catalog.dart';
+import 'package:finance_ai_assistant/render/catalog/capability_info_card.dart';
 import 'package:finance_ai_assistant/render/catalog/category_figure_card.dart';
 import 'package:finance_ai_assistant/render/catalog/confirmation_card.dart';
 import 'package:finance_ai_assistant/render/catalog/spending_summary_card.dart';
@@ -98,6 +99,38 @@ void main() {
       ariaCatalog.items.any((i) => i.name == kCategoryFigureCardName),
       isTrue,
     );
+  });
+
+  test('ariaCatalog exposes CapabilityInfoCard', () {
+    expect(
+      ariaCatalog.items.any((i) => i.name == kCapabilityInfoCardName),
+      isTrue,
+    );
+  });
+
+  test('Beat 4 CapabilityInfoCard payload validates on a real SurfaceController',
+      () async {
+    final controller = SurfaceController(catalogs: [ariaCatalog]);
+    final errors = <Object>[];
+    final sub = controller.onSubmit.listen(errors.add);
+
+    final outcome = AgentOutcome(
+      userText: 'Delete all my transactions.',
+      answerText: '',
+      steps: const [],
+      effects: const [], // structural refusal: no tool ran
+      kind: OutcomeKind.capabilityInfo,
+    );
+
+    _renderInto(controller, outcome, 'capability');
+    await Future<void>.delayed(Duration.zero);
+
+    expect(controller.activeSurfaceIds, contains('capability'));
+    final definition = controller.registry.getSurface('capability');
+    expect(definition?.components['root']?.type, kCapabilityInfoCardName);
+    expect(errors, isEmpty); // no validation error
+
+    await sub.cancel();
   });
 
   test('Beat 3 CategoryFigureCard payload validates on a real SurfaceController',
