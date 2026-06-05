@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "949289792362",
+    "project_id": "adaptive-commerce",
+    "storage_bucket": "adaptive-commerce.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:949289792362:android:c5cfaf33c357ac37f46b13",
+        "android_client_info": {
+          "package_name": "com.example.finance_ai_assistant"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBscw9mTdoTSe5wZ2RW0s3BOGwXyypzEuc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:949289792362:android:c082ffb74a3fae76f46b13",
+        "android_client_info": {
+          "package_name": "com.genui.commerce"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBscw9mTdoTSe5wZ2RW0s3BOGwXyypzEuc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
