@@ -1,14 +1,13 @@
-// Host tests for the mode-4A mapping. Pure Dart: AgentOutcome -> A2UI messages,
+// Host tests for the mode-4A mapping. Pure Dart: AgentOutcome -> root component(s),
 // no Firebase, no rendering.
 
 import 'package:finance_ai_assistant/agent/agent_outcome.dart';
-import 'package:finance_ai_assistant/render/catalog/aria_catalog.dart';
+import 'package:finance_ai_assistant/render/catalog/category_figure_card.dart';
 import 'package:finance_ai_assistant/render/catalog/confirmation_card.dart';
 import 'package:finance_ai_assistant/render/catalog/reminder_status_card.dart';
 import 'package:finance_ai_assistant/render/catalog/spending_summary_card.dart';
 import 'package:finance_ai_assistant/render/outcome_to_surface.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:genui/genui.dart';
 
 void main() {
   AgentOutcome spendingOutcome() => AgentOutcome(
@@ -42,19 +41,11 @@ void main() {
         kind: OutcomeKind.spendingSummary,
       );
 
-  test('spendingSummary -> CreateSurface + UpdateComponents(SpendingSummaryCard)',
-      () {
-    final messages =
-        surfaceMessagesFor(spendingOutcome(), surfaceId: 'surface-1');
+  test('spendingSummary -> a single SpendingSummaryCard component', () {
+    final components = surfaceComponentsFor(spendingOutcome());
+    expect(components, hasLength(1));
 
-    expect(messages, hasLength(2));
-
-    final create = messages[0] as CreateSurface;
-    expect(create.surfaceId, 'surface-1');
-    expect(create.catalogId, ariaCatalogId);
-
-    final update = messages[1] as UpdateComponents;
-    final root = update.components.single;
+    final root = components.single;
     expect(root.id, 'root');
     expect(root.type, kSpendingSummaryCardName);
     expect(root.properties['total'], 47200);
@@ -88,9 +79,7 @@ void main() {
       kind: OutcomeKind.spendingSummary,
     );
 
-    final update =
-        surfaceMessagesFor(outcome, surfaceId: 's').last as UpdateComponents;
-    final root = update.components.single;
+    final root = surfaceComponentsFor(outcome).single;
     expect(root.properties['total'], 21600);
     expect(root.properties['topCategory'], 'food');
   });
@@ -117,17 +106,14 @@ void main() {
       kind: OutcomeKind.confirmationNeeded,
     );
 
-    final root = (surfaceMessagesFor(outcome, surfaceId: 's').last
-            as UpdateComponents)
-        .components
-        .single;
+    final root = surfaceComponentsFor(outcome).single;
     expect(root.type, kConfirmationCardName);
     expect(root.properties['category'], 'food');
     expect(root.properties['recurrence'], 'monthly');
     expect(root.properties['title'], 'Review food spending');
   });
 
-  test('reminderUpdated -> ReminderStatusCard from the reminder effect', () {
+  test('reminderUpdated (reminder only) -> a single ReminderStatusCard', () {
     final outcome = AgentOutcome(
       userText: 'Yes, set the monthly food reminder.',
       answerText: 'Done — monthly reminder created.',
@@ -149,20 +135,99 @@ void main() {
       kind: OutcomeKind.reminderUpdated,
     );
 
-    final root = (surfaceMessagesFor(outcome, surfaceId: 's').last
-            as UpdateComponents)
-        .components
-        .single;
+    final components = surfaceComponentsFor(outcome);
+    expect(components, hasLength(1));
+    final root = components.single;
     expect(root.type, kReminderStatusCardName);
     expect(root.properties['title'], 'Review food spending');
     expect(root.properties['recurrence'], 'monthly');
     expect(root.properties['status'], 'created');
   });
 
-  test('kinds without a card yet -> no messages', () {
+  test('categoryFigure standalone -> a single CategoryFigureCard', () {
+    final outcome = AgentOutcome(
+      userText: 'what about entertainment?',
+      answerText: 'You spent 6800 on entertainment last month.',
+      steps: const [],
+      effects: const [
+        ToolEffect(
+          tool: 'query_transactions',
+          input: {'period': 'last_month', 'category': 'entertainment'},
+          data: [
+            {'amount': 649, 'category': 'entertainment'},
+            {'amount': 199, 'category': 'entertainment'},
+            {'amount': 1400, 'category': 'entertainment'},
+            {'amount': 2100, 'category': 'entertainment'},
+            {'amount': 1252, 'category': 'entertainment'},
+            {'amount': 1200, 'category': 'entertainment'},
+          ],
+          isError: false,
+        ),
+      ],
+      kind: OutcomeKind.categoryFigure,
+    );
+
+    final root = surfaceComponentsFor(outcome).single;
+    expect(root.type, kCategoryFigureCardName);
+    expect(root.properties['category'], 'entertainment');
+    expect(root.properties['amount'], 6800);
+    expect(root.properties['period'], 'last month');
+    expect(root.properties['count'], 6);
+  });
+
+  test('Beat 3 combined (reminder update + entertainment query) -> two cards, '
+      'reminder then figure', () {
+    final outcome = AgentOutcome(
+      userText: 'Actually make it weekly instead, and what about entertainment?',
+      answerText: 'Updated to weekly. Entertainment was 6800 last month.',
+      steps: const [],
+      effects: const [
+        ToolEffect(
+          tool: 'update_budget_reminder',
+          input: {'category': 'food', 'recurrence': 'weekly'},
+          data: {
+            'id': 'food',
+            'title': 'Review food spending',
+            'category': 'food',
+            'recurrence': 'weekly',
+            'status': 'updated',
+          },
+          isError: false,
+        ),
+        ToolEffect(
+          tool: 'query_transactions',
+          input: {'period': 'last_month', 'category': 'entertainment'},
+          data: [
+            {'amount': 649, 'category': 'entertainment'},
+            {'amount': 199, 'category': 'entertainment'},
+            {'amount': 1400, 'category': 'entertainment'},
+            {'amount': 2100, 'category': 'entertainment'},
+            {'amount': 1252, 'category': 'entertainment'},
+            {'amount': 1200, 'category': 'entertainment'},
+          ],
+          isError: false,
+        ),
+      ],
+      kind: OutcomeKind.reminderUpdated,
+    );
+
+    final components = surfaceComponentsFor(outcome);
+    expect(components, hasLength(2));
+
+    // Order: regenerated reminder card on top, then the entertainment figure.
+    expect(components[0].type, kReminderStatusCardName);
+    expect(components[0].properties['recurrence'], 'weekly');
+    expect(components[0].properties['status'], 'updated');
+
+    expect(components[1].type, kCategoryFigureCardName);
+    expect(components[1].properties['category'], 'entertainment');
+    expect(components[1].properties['amount'], 6800);
+    expect(components[1].properties['count'], 6);
+  });
+
+  test('kinds without a card yet -> no components', () {
     for (final kind in [
       OutcomeKind.capabilityInfo,
-      OutcomeKind.categoryFigure,
       OutcomeKind.savingsPlan,
     ]) {
       final outcome = AgentOutcome(
@@ -172,7 +237,7 @@ void main() {
         effects: const [],
         kind: kind,
       );
-      expect(surfaceMessagesFor(outcome, surfaceId: 's'), isEmpty,
+      expect(surfaceComponentsFor(outcome), isEmpty,
           reason: '$kind should not render a surface yet');
     }
   });

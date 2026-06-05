@@ -6,26 +6,25 @@
 // (feeding these to a SurfaceController) lives in `genui_renderer.dart`.
 
 import '../agent/agent_outcome.dart';
-import 'catalog/aria_catalog.dart';
+import 'catalog/category_figure_card.dart';
 import 'catalog/confirmation_card.dart';
 import 'catalog/reminder_status_card.dart';
 import 'catalog/spending_summary_card.dart';
 import 'package:genui/genui.dart';
 
-/// Build the A2UI messages for [outcome] on [surfaceId]. Returns an empty list
-/// for kinds not yet mapped (steps 7+ add their cards), in which case the screen
-/// falls back to showing `answerText`.
-List<A2uiMessage> surfaceMessagesFor(
-  AgentOutcome outcome, {
-  required String surfaceId,
-}) {
+/// Build the root component(s) for [outcome] — one per genui surface. Usually one,
+/// but Beat 3 returns TWO (the regenerated `ReminderStatusCard` + a small
+/// `CategoryFigureCard`), which the renderer stacks as separate surfaces. Each
+/// component uses id `'root'` (genui requires a root id per surface). Returns an
+/// empty list for kinds not yet mapped (steps 10+ add their cards), in which case
+/// the screen falls back to showing `answerText`.
+List<Component> surfaceComponentsFor(AgentOutcome outcome) {
   switch (outcome.kind) {
     case OutcomeKind.spendingSummary:
       final summary = _spendingFrom(outcome.effects);
       if (summary == null) return const [];
-      return _cardMessages(
-        surfaceId: surfaceId,
-        component: Component(
+      return [
+        Component(
           id: 'root',
           type: kSpendingSummaryCardName,
           properties: {
@@ -37,13 +36,12 @@ List<A2uiMessage> surfaceMessagesFor(
             ],
           },
         ),
-      );
+      ];
 
     case OutcomeKind.confirmationNeeded:
       final proposal = _reminderProposalFrom(outcome);
-      return _cardMessages(
-        surfaceId: surfaceId,
-        component: Component(
+      return [
+        Component(
           id: 'root',
           type: kConfirmationCardName,
           properties: {
@@ -56,14 +54,16 @@ List<A2uiMessage> surfaceMessagesFor(
             'title': proposal.title,
           },
         ),
-      );
+      ];
 
     case OutcomeKind.reminderUpdated:
+      // The regenerated reminder card. In Beat 3 the same turn ALSO queries one
+      // category ("what about entertainment?"), so we append a CategoryFigureCard
+      // surface below it — the interface re-composes to match the new state.
+      final components = <Component>[];
       final reminder = _reminderResultFrom(outcome.effects);
-      if (reminder == null) return const [];
-      return _cardMessages(
-        surfaceId: surfaceId,
-        component: Component(
+      if (reminder != null) {
+        components.add(Component(
           id: 'root',
           type: kReminderStatusCardName,
           properties: {
@@ -72,29 +72,24 @@ List<A2uiMessage> surfaceMessagesFor(
             'recurrence': reminder['recurrence'] ?? '',
             'status': reminder['status'] ?? 'created',
           },
-        ),
-      );
+        ));
+      }
+      final figure = _categoryFigureFrom(outcome.effects);
+      if (figure != null) components.add(figure);
+      return components;
 
-    // The remaining kinds get their cards in later build steps (step 9:
-    // CategoryFigureCard, step 10: CapabilityInfoCard, step 11: SavingsPlanCard).
-    // Until then they render no surface and the screen falls back to `answerText`.
     case OutcomeKind.categoryFigure:
+      // Standalone "what about entertainment?" — a single figure card.
+      final figure = _categoryFigureFrom(outcome.effects);
+      return figure == null ? const [] : [figure];
+
+    // The remaining kinds get their cards in later build steps (step 10:
+    // CapabilityInfoCard, step 11: SavingsPlanCard). Until then they render no
+    // surface and the screen falls back to `answerText`.
     case OutcomeKind.capabilityInfo:
     case OutcomeKind.savingsPlan:
       return const [];
   }
-}
-
-/// A surface is created then populated: `CreateSurface` only sets up the id +
-/// catalog binding; `UpdateComponents` supplies the (root) component tree.
-List<A2uiMessage> _cardMessages({
-  required String surfaceId,
-  required Component component,
-}) {
-  return [
-    CreateSurface(surfaceId: surfaceId, catalogId: ariaCatalogId),
-    UpdateComponents(surfaceId: surfaceId, components: [component]),
-  ];
 }
 
 /// The spending figures a SpendingSummaryCard needs, with categories sorted
@@ -212,6 +207,47 @@ Map<String, String>? _reminderResultFrom(List<ToolEffect> effects) {
     if (str(data['recurrence']) != null) 'recurrence': str(data['recurrence'])!,
     if (str(data['status']) != null) 'status': str(data['status'])!,
   };
+}
+
+/// Period codes (the `query_transactions` enum) rendered in words for the card.
+const _periodWords = {
+  'last_month': 'last month',
+  'this_week': 'this week',
+  'this_month': 'this month',
+};
+
+/// Build a CategoryFigureCard component from a category-scoped `query_transactions`
+/// effect (Beat 3's "what about entertainment?"). Sums the amounts and counts the
+/// rows from the returned JSON list. Returns null if no category-scoped query ran.
+Component? _categoryFigureFrom(List<ToolEffect> effects) {
+  final effect = effects
+      .where((e) =>
+          e.tool == 'query_transactions' &&
+          (e.input['category'] as String?)?.isNotEmpty == true)
+      .firstOrNull;
+  if (effect == null) return null;
+
+  final category = (effect.input['category'] as String).toLowerCase();
+  final rows = (effect.data is List)
+      ? (effect.data as List).whereType<Map>().toList()
+      : const <Map>[];
+  num amount = 0;
+  for (final row in rows) {
+    final amt = row['amount'];
+    if (amt is num) amount += amt;
+  }
+  final period = _periodWords[effect.input['period']] ?? '';
+
+  return Component(
+    id: 'root',
+    type: kCategoryFigureCardName,
+    properties: {
+      'category': category,
+      'amount': amount,
+      if (period.isNotEmpty) 'period': period,
+      'count': rows.length,
+    },
+  );
 }
 
 Map<String, num> _numMap(Object? raw) {

@@ -22,9 +22,12 @@ class GenUiRenderer {
   /// build a `Surface`.
   final SurfaceController controller;
 
-  /// The surface currently showing, or null when there's nothing to render
-  /// (e.g. a kind not yet mapped to a card). The screen listens to this.
-  final ValueNotifier<String?> activeSurfaceId = ValueNotifier<String?>(null);
+  /// The surfaces currently showing, in display order — empty when there's
+  /// nothing to render (e.g. a kind not yet mapped to a card). Usually one card,
+  /// but Beat 3 stacks two (regenerated ReminderStatusCard + CategoryFigureCard).
+  /// The screen listens to this and renders a Surface per id.
+  final ValueNotifier<List<String>> activeSurfaceIds =
+      ValueNotifier<List<String>>(const []);
 
   /// User turns produced by interactive cards (e.g. a ConfirmationCard's Confirm
   /// tap). The screen feeds these back through `agentService.runTurn`, so a card
@@ -36,50 +39,55 @@ class GenUiRenderer {
       .cast<String>();
 
   int _counter = 0;
-  // The id of the surface currently in the controller, tracked independently of
-  // the visibility notifier (which the screen may null mid-turn) so teardown is
+  // The ids of the surfaces currently in the controller, tracked independently of
+  // the visibility notifier (which the screen may clear mid-turn) so teardown is
   // always correct.
-  String? _liveSurfaceId;
+  List<String> _liveSurfaceIds = const [];
 
-  /// Render [outcome] as a genui surface (mode 4A). Tears down the previous
-  /// surface first so only the latest beat's card shows.
+  /// Render [outcome] as genui surface(s) (mode 4A). Tears down the previous
+  /// surfaces first so only the latest beat's cards show. One component per
+  /// surface; Beat 3 yields two, stacked in order.
   void render(AgentOutcome outcome) {
     try {
       _deleteLive();
 
-      final surfaceId = 'aria-surface-${_counter++}';
-      final messages = surfaceMessagesFor(outcome, surfaceId: surfaceId);
-      if (messages.isEmpty) {
-        activeSurfaceId.value = null; // unmapped kind → screen shows answerText
+      final components = surfaceComponentsFor(outcome);
+      if (components.isEmpty) {
+        activeSurfaceIds.value = const []; // unmapped kind → screen shows answerText
         return;
       }
-      for (final message in messages) {
-        controller.handleMessage(message);
+      final ids = <String>[];
+      for (final component in components) {
+        final surfaceId = 'aria-surface-${_counter++}';
+        controller
+            .handleMessage(CreateSurface(surfaceId: surfaceId, catalogId: ariaCatalogId));
+        controller.handleMessage(
+            UpdateComponents(surfaceId: surfaceId, components: [component]));
+        ids.add(surfaceId);
       }
-      _liveSurfaceId = surfaceId;
-      activeSurfaceId.value = surfaceId;
+      _liveSurfaceIds = ids;
+      activeSurfaceIds.value = ids;
     } catch (error, stack) {
       debugPrint('GenUiRenderer.render failed: $error\n$stack');
-      activeSurfaceId.value = null;
+      activeSurfaceIds.value = const [];
     }
   }
 
-  /// Tear down the current surface and hide it (e.g. at the start of a new turn).
+  /// Tear down the current surfaces and hide them (e.g. at the start of a new turn).
   void clear() {
     _deleteLive();
-    activeSurfaceId.value = null;
+    activeSurfaceIds.value = const [];
   }
 
   void _deleteLive() {
-    final current = _liveSurfaceId;
-    if (current != null) {
-      controller.handleMessage(DeleteSurface(surfaceId: current));
-      _liveSurfaceId = null;
+    for (final id in _liveSurfaceIds) {
+      controller.handleMessage(DeleteSurface(surfaceId: id));
     }
+    _liveSurfaceIds = const [];
   }
 
   void dispose() {
     controller.dispose();
-    activeSurfaceId.dispose();
+    activeSurfaceIds.dispose();
   }
 }

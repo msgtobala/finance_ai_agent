@@ -112,6 +112,9 @@ class DeviceCalendarService implements CalendarService {
   String? _calendarId;
   bool _tzReady = false;
 
+  /// Name of the dedicated calendar we create/own for Aria's reminders.
+  static const String _ariaCalendarName = 'Aria';
+
   void _ensureTimezone() {
     if (_tzReady) return;
     tz_data.initializeTimeZones();
@@ -157,8 +160,10 @@ class DeviceCalendarService implements CalendarService {
       }
     }
     // No writable calendar on the device → make our own so the write succeeds.
-    final created =
-        await _plugin.createCalendar('Aria', localAccountName: 'Aria');
+    final created = await _plugin.createCalendar(
+      _ariaCalendarName,
+      localAccountName: _ariaCalendarName,
+    );
     if (created.isSuccess) _calendarId = created.data;
     return _calendarId;
   }
@@ -193,6 +198,13 @@ class DeviceCalendarService implements CalendarService {
       start: start,
       end: start.add(const Duration(minutes: 30)),
       recurrenceRule: _rule(recurrence),
+      // MUST set an explicit status. On UPDATE the Android CalendarProvider2
+      // (doesStatusCancelUpdateMeanUpdate) unboxes Events.STATUS as an int; if
+      // we leave status null, device_calendar writes a null STATUS and the
+      // provider NPEs ("Integer.intValue() on null"), silently failing Beat 3's
+      // monthly→weekly update. INSERT never calls that path, so create worked
+      // but update didn't. Confirmed is the correct status for a real reminder.
+      status: EventStatus.Confirmed,
     );
     final result = await _plugin.createOrUpdateEvent(event);
     if (result == null || !result.isSuccess || result.data == null) {

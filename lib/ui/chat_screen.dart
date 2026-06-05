@@ -73,7 +73,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     setState(() {
       _running = false;
       _fallbackAnswer =
-          ref.read(rendererProvider).activeSurfaceId.value == null
+          ref.read(rendererProvider).activeSurfaceIds.value.isEmpty
               ? outcome.answerText
               : '';
     });
@@ -142,10 +142,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     children: [
                       const ReasoningTrace(),
                       const SizedBox(height: 16),
-                      ValueListenableBuilder<String?>(
-                        valueListenable: renderer.activeSurfaceId,
-                        builder: (context, surfaceId, _) {
-                          if (surfaceId == null) {
+                      ValueListenableBuilder<List<String>>(
+                        valueListenable: renderer.activeSurfaceIds,
+                        builder: (context, surfaceIds, _) {
+                          if (surfaceIds.isEmpty) {
                             return _fallbackAnswer.isEmpty
                                 ? const SizedBox.shrink()
                                 : Text(
@@ -154,9 +154,20 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                                         Theme.of(context).textTheme.titleLarge,
                                   );
                           }
-                          return Surface(
-                            surfaceContext:
-                                renderer.controller.contextFor(surfaceId),
+                          // One Surface per id, stacked in order (Beat 3 shows
+                          // the regenerated reminder card + the category figure).
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              for (final surfaceId in surfaceIds) ...[
+                                Surface(
+                                  surfaceContext: renderer.controller
+                                      .contextFor(surfaceId),
+                                ),
+                                if (surfaceId != surfaceIds.last)
+                                  const SizedBox(height: 12),
+                              ],
+                            ],
                           );
                         },
                       ),

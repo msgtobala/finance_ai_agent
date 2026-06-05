@@ -8,12 +8,32 @@
 
 import 'package:finance_ai_assistant/agent/agent_outcome.dart';
 import 'package:finance_ai_assistant/render/catalog/aria_catalog.dart';
+import 'package:finance_ai_assistant/render/catalog/category_figure_card.dart';
 import 'package:finance_ai_assistant/render/catalog/confirmation_card.dart';
 import 'package:finance_ai_assistant/render/catalog/spending_summary_card.dart';
 import 'package:finance_ai_assistant/render/dispatch_bridge.dart';
 import 'package:finance_ai_assistant/render/outcome_to_surface.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:genui/genui.dart';
+
+/// Drive the mode-4A components for [outcome] into [controller] as the renderer
+/// does — one surface per component, ids prefixed with [prefix].
+List<String> _renderInto(
+  SurfaceController controller,
+  AgentOutcome outcome,
+  String prefix,
+) {
+  final components = surfaceComponentsFor(outcome);
+  final ids = <String>[];
+  for (var i = 0; i < components.length; i++) {
+    final id = components.length == 1 ? prefix : '$prefix-$i';
+    controller.handleMessage(CreateSurface(surfaceId: id, catalogId: ariaCatalogId));
+    controller.handleMessage(
+        UpdateComponents(surfaceId: id, components: [components[i]]));
+    ids.add(id);
+  }
+  return ids;
+}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -48,9 +68,7 @@ void main() {
       kind: OutcomeKind.spendingSummary,
     );
 
-    for (final message in surfaceMessagesFor(outcome, surfaceId: 'beat1')) {
-      controller.handleMessage(message);
-    }
+    _renderInto(controller, outcome, 'beat1');
     // Let any async validation submissions settle.
     await Future<void>.delayed(Duration.zero);
 
@@ -73,6 +91,52 @@ void main() {
       ariaCatalog.items.any((i) => i.name == kSpendingSummaryCardName),
       isTrue,
     );
+  });
+
+  test('ariaCatalog exposes CategoryFigureCard', () {
+    expect(
+      ariaCatalog.items.any((i) => i.name == kCategoryFigureCardName),
+      isTrue,
+    );
+  });
+
+  test('Beat 3 CategoryFigureCard payload validates on a real SurfaceController',
+      () async {
+    final controller = SurfaceController(catalogs: [ariaCatalog]);
+    final errors = <Object>[];
+    final sub = controller.onSubmit.listen(errors.add);
+
+    final outcome = AgentOutcome(
+      userText: 'what about entertainment?',
+      answerText: 'You spent 6800 on entertainment last month.',
+      steps: const [],
+      effects: const [
+        ToolEffect(
+          tool: 'query_transactions',
+          input: {'period': 'last_month', 'category': 'entertainment'},
+          data: [
+            {'amount': 649, 'category': 'entertainment'},
+            {'amount': 199, 'category': 'entertainment'},
+            {'amount': 1400, 'category': 'entertainment'},
+            {'amount': 2100, 'category': 'entertainment'},
+            {'amount': 1252, 'category': 'entertainment'},
+            {'amount': 1200, 'category': 'entertainment'},
+          ],
+          isError: false,
+        ),
+      ],
+      kind: OutcomeKind.categoryFigure,
+    );
+
+    _renderInto(controller, outcome, 'figure');
+    await Future<void>.delayed(Duration.zero);
+
+    expect(controller.activeSurfaceIds, contains('figure'));
+    final definition = controller.registry.getSurface('figure');
+    expect(definition?.components['root']?.type, kCategoryFigureCardName);
+    expect(errors, isEmpty); // no validation error
+
+    await sub.cancel();
   });
 
   test('ConfirmationCard payload validates and its Confirm tap bridges back to '
@@ -100,9 +164,7 @@ void main() {
       kind: OutcomeKind.confirmationNeeded,
     );
 
-    for (final message in surfaceMessagesFor(outcome, surfaceId: 'confirm')) {
-      controller.handleMessage(message);
-    }
+    _renderInto(controller, outcome, 'confirm');
     await Future<void>.delayed(Duration.zero);
 
     // The card validated and registered.
