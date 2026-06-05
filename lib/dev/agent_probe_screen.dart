@@ -7,8 +7,8 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:langchain/langchain.dart' show AgentStep;
 
+import '../agent/agent_outcome.dart';
 import '../ui/providers.dart';
 
 /// The five canonical beat inputs (STORYLINE §4) as quick buttons.
@@ -31,8 +31,7 @@ class AgentProbeScreen extends ConsumerStatefulWidget {
 class _AgentProbeScreenState extends ConsumerState<AgentProbeScreen> {
   final _controller = TextEditingController();
   bool _running = false;
-  String _output = '';
-  List<AgentStep> _steps = const [];
+  AgentOutcome? _outcome;
 
   @override
   void dispose() {
@@ -44,25 +43,24 @@ class _AgentProbeScreenState extends ConsumerState<AgentProbeScreen> {
     if (input.trim().isEmpty || _running) return;
     setState(() {
       _running = true;
-      _output = '';
-      _steps = const [];
+      _outcome = null;
     });
     debugPrint('──────── AGENT TURN ────────');
     debugPrint('INPUT: $input');
 
-    final result = await ref.read(agentServiceProvider).runTurn(input);
+    final outcome = await ref.read(agentServiceProvider).runTurn(input);
 
-    for (final s in result.steps) {
-      debugPrint('🔧 ${s.action.tool} ${s.action.toolInput} -> ${s.observation}');
+    for (final e in outcome.effects) {
+      debugPrint('🔧 ${e.tool} ${e.input} -> ${e.isError ? '⚠️ ${e.data}' : e.data}');
     }
-    debugPrint('OUTPUT: ${result.output}');
-    debugPrint('──────── END TURN (${result.steps.length} steps) ────────');
+    debugPrint('🏷️ kind: ${outcome.kind.name}');
+    debugPrint('✅ ${outcome.answerText}');
+    debugPrint('──────── END TURN (${outcome.effects.length} effects) ────────');
 
     if (!mounted) return;
     setState(() {
       _running = false;
-      _output = result.output;
-      _steps = result.steps;
+      _outcome = outcome;
     });
   }
 
@@ -112,31 +110,50 @@ class _AgentProbeScreenState extends ConsumerState<AgentProbeScreen> {
               label: Text(_running ? 'Reasoning…' : 'Run turn'),
             ),
             const SizedBox(height: 16),
-            const Text('Reasoning trace (also printed to console):',
+            const Text('Reasoning trace + derived kind (also printed to console):',
                 style: TextStyle(fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
-            Expanded(
-              child: ListView(
-                children: [
-                  for (final s in _steps)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 4),
-                      child: Text(
-                        '🔧 ${s.action.tool}  ${s.action.toolInput}\n   → ${s.observation}',
-                        style: const TextStyle(
-                            fontFamily: 'monospace', fontSize: 12),
-                      ),
-                    ),
-                  if (_output.isNotEmpty) ...[
-                    const Divider(),
-                    Text('✅ $_output', style: const TextStyle(fontSize: 16)),
-                  ],
-                ],
-              ),
-            ),
+            Expanded(child: _OutcomeView(outcome: _outcome)),
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Compact, throwaway view of one [AgentOutcome]: the derived kind chip, the
+/// trace lines, and the final answer. The real trace panel + genui cards arrive
+/// in steps 6–7; this just proves the seam per beat.
+class _OutcomeView extends StatelessWidget {
+  const _OutcomeView({required this.outcome});
+
+  final AgentOutcome? outcome;
+
+  static const _glyph = {
+    TraceStepKind.thinking: '🧠',
+    TraceStepKind.tool: '🔧',
+    TraceStepKind.done: '✅',
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    final o = outcome;
+    if (o == null) return const SizedBox.shrink();
+    return ListView(
+      children: [
+        Chip(label: Text('kind: ${o.kind.name}')),
+        const SizedBox(height: 8),
+        for (final s in o.steps)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: Text(
+              '${_glyph[s.kind]} ${s.text}',
+              style: s.kind == TraceStepKind.done
+                  ? const TextStyle(fontSize: 16)
+                  : const TextStyle(fontFamily: 'monospace', fontSize: 12),
+            ),
+          ),
+      ],
     );
   }
 }

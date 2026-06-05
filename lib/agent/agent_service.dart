@@ -4,6 +4,7 @@ import 'package:logging/logging.dart';
 
 import '../data/calendar_service.dart';
 import '../data/transaction_repo.dart';
+import 'agent_outcome.dart';
 import 'system_prompt_stage1.dart';
 import 'tools/query_transactions.dart';
 import 'tools/set_budget_reminder.dart';
@@ -26,16 +27,6 @@ List<Tool> buildAriaTools({
     buildSetBudgetReminderTool(calendar), // create reminder
     buildUpdateBudgetReminderTool(calendar), // update reminder
   ];
-}
-
-/// The result of one Stage-1 turn: the final answer plus the ordered
-/// intermediate steps that drive the reasoning trace. (Step 5 maps this into a
-/// richer `AgentOutcome`; for now it is the raw, printable result.)
-class AgentRunResult {
-  const AgentRunResult({required this.output, required this.steps});
-
-  final String output;
-  final List<AgentStep> steps;
 }
 
 /// Stage 1 — agentic reasoning (LangChain.dart + Gemini via Firebase).
@@ -88,23 +79,27 @@ class AgentService {
   late final ConversationBufferMemory _memory;
   late final AgentExecutor _executor;
 
-  /// Run one user turn through Stage 1. Never throws — returns an error answer
-  /// with empty steps so the demo can't hard-crash on stage.
-  Future<AgentRunResult> runTurn(String input) async {
+  /// Run one user turn through Stage 1 and return the structured [AgentOutcome]
+  /// seam Stage 2 renders from (ARCHITECTURE.md §3.4). Never throws — on failure
+  /// it returns a benign outcome (empty effects ⇒ `capabilityInfo`) so the demo
+  /// can't hard-crash on stage.
+  Future<AgentOutcome> runTurn(String input) async {
     try {
       final result = await _executor.invoke({'input': input});
       final steps =
           (result[AgentExecutor.intermediateStepsOutputKey] as List?)
                   ?.cast<AgentStep>() ??
               const <AgentStep>[];
-      return AgentRunResult(
-        output: result['output'] as String? ?? '',
+      return buildAgentOutcome(
+        userText: input,
+        answerText: result['output'] as String? ?? '',
         steps: steps,
       );
     } catch (e, st) {
       _log.severe('runTurn failed for input: $input', e, st);
-      return AgentRunResult(
-        output: 'Sorry — something went wrong while reasoning about that.',
+      return buildAgentOutcome(
+        userText: input,
+        answerText: 'Sorry — something went wrong while reasoning about that.',
         steps: const [],
       );
     }

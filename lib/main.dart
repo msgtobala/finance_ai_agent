@@ -3,8 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:logging/logging.dart';
 
-import 'dev/agent_probe_screen.dart';
 import 'firebase_options.dart';
+import 'ui/chat_screen.dart';
 
 final _log = Logger('aria.main');
 
@@ -44,7 +44,7 @@ class AriaSmokeApp extends StatelessWidget {
         ),
         useMaterial3: true,
       ),
-      home: const AgentProbeScreen(),
+      home: const ChatScreen(),
     );
   }
 }
