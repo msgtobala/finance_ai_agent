@@ -10,6 +10,7 @@ import 'catalog/capability_info_card.dart';
 import 'catalog/category_figure_card.dart';
 import 'catalog/confirmation_card.dart';
 import 'catalog/reminder_status_card.dart';
+import 'catalog/savings_plan_card.dart';
 import 'catalog/spending_summary_card.dart';
 import 'package:genui/genui.dart';
 
@@ -58,23 +59,24 @@ List<Component> surfaceComponentsFor(AgentOutcome outcome) {
       ];
 
     case OutcomeKind.reminderUpdated:
-      // The regenerated reminder card. In Beat 3 the same turn ALSO queries one
-      // category ("what about entertainment?"), so we append a CategoryFigureCard
-      // surface below it — the interface re-composes to match the new state.
-      final components = <Component>[];
-      final reminder = _reminderResultFrom(outcome.effects);
-      if (reminder != null) {
-        components.add(Component(
-          id: 'root',
-          type: kReminderStatusCardName,
-          properties: {
-            'title': reminder['title'] ?? 'Reminder',
-            if (reminder['category'] != null) 'category': reminder['category'],
-            'recurrence': reminder['recurrence'] ?? '',
-            'status': reminder['status'] ?? 'created',
-          },
-        ));
-      }
+      // One ReminderStatusCard per reminder written this turn. Beat 2 / Beat 3
+      // write a single reminder → one card; Beat 5's "Set these reminders"
+      // chain-back writes several → a stack of cards. In Beat 3 the same turn
+      // ALSO queries one category ("what about entertainment?"), so we append a
+      // CategoryFigureCard below — the interface re-composes to match the state.
+      final components = <Component>[
+        for (final reminder in _reminderResultsFrom(outcome.effects))
+          Component(
+            id: 'root',
+            type: kReminderStatusCardName,
+            properties: {
+              'title': reminder['title'] ?? 'Reminder',
+              if (reminder['category'] != null) 'category': reminder['category'],
+              'recurrence': reminder['recurrence'] ?? '',
+              'status': reminder['status'] ?? 'created',
+            },
+          ),
+      ];
       final figure = _categoryFigureFrom(outcome.effects);
       if (figure != null) components.add(figure);
       return components;
@@ -109,10 +111,32 @@ List<Component> surfaceComponentsFor(AgentOutcome outcome) {
         ),
       ];
 
-    // The remaining kind gets its card in step 11 (SavingsPlanCard). Until then
-    // it renders no surface and the screen falls back to `answerText`.
     case OutcomeKind.savingsPlan:
-      return const [];
+      // Beat 5 finale: per-category targets from last month's real spend (mode
+      // 4A — composed deterministically, no second model call). null when there's
+      // no spending data to base a plan on → screen falls back to answerText.
+      final plan = _savingsPlanFrom(outcome.effects);
+      if (plan == null) return const [];
+      return [
+        Component(
+          id: 'root',
+          type: kSavingsPlanCardName,
+          properties: {
+            'headline': 'Plan to spend less',
+            'recurrence': 'monthly',
+            'actionLabel': 'Set these reminders',
+            'targets': [
+              for (final t in plan)
+                {
+                  'category': t.category,
+                  'current': t.current,
+                  'target': t.target,
+                  'saving': t.saving,
+                },
+            ],
+          },
+        ),
+      ];
   }
 }
 
@@ -214,23 +238,53 @@ bool _isTop(_Spending s, String category) => s.topCategory == category;
 
 String _rupees(num value) => '₹${value.round()}';
 
-/// The structured result of a set/update reminder tool, for ReminderStatusCard.
-Map<String, String>? _reminderResultFrom(List<ToolEffect> effects) {
-  final effect = effects
-      .where((e) =>
-          (e.tool == 'set_budget_reminder' ||
+/// The structured results of every set/update reminder tool call this turn, in
+/// order, for ReminderStatusCard(s). One per reminder written — usually one (Beat
+/// 2/3), several for Beat 5's "Set these reminders" chain-back.
+List<Map<String, String>> _reminderResultsFrom(List<ToolEffect> effects) {
+  String? str(Object? v) => v?.toString();
+  return [
+    for (final e in effects)
+      if ((e.tool == 'set_budget_reminder' ||
               e.tool == 'update_budget_reminder') &&
           e.data is Map)
-      .firstOrNull;
-  if (effect == null) return null;
-  final data = effect.data as Map;
-  String? str(Object? v) => v?.toString();
-  return {
-    if (str(data['title']) != null) 'title': str(data['title'])!,
-    if (str(data['category']) != null) 'category': str(data['category'])!,
-    if (str(data['recurrence']) != null) 'recurrence': str(data['recurrence'])!,
-    if (str(data['status']) != null) 'status': str(data['status'])!,
-  };
+        {
+          for (final key in const ['title', 'category', 'recurrence', 'status'])
+            if (str((e.data as Map)[key]) != null) key: str((e.data as Map)[key])!,
+        },
+  ];
+}
+
+/// One suggested budget target for the savings plan (Beat 5).
+class _SavingsTarget {
+  _SavingsTarget(this.category, this.current, this.target, this.saving);
+
+  final String category;
+  final num current;
+  final num target;
+  final num saving;
+}
+
+/// Discretionary categories we propose cutting, in priority order. Bills and
+/// transport are deliberately excluded — they're the least discretionary; food
+/// and shopping lead (STORYLINE Beat 5: "the most room to cut").
+const _discretionary = ['food', 'shopping', 'entertainment'];
+
+/// Build up to three per-category targets from last month's real spend. Each
+/// target is a fixed 15% cut rounded to the nearest ₹100 — deterministic from the
+/// seed (food 14,800→12,600, shopping 9,500→8,100, entertainment 6,800→5,800).
+/// Returns null when there's no discretionary spend to base a plan on.
+List<_SavingsTarget>? _savingsPlanFrom(List<ToolEffect> effects) {
+  final spending = _spendingFrom(effects);
+  if (spending == null) return null;
+  final targets = <_SavingsTarget>[];
+  for (final category in _discretionary) {
+    final current = spending.byCategory[category];
+    if (current == null || current <= 0) continue;
+    final target = (current * 0.85 / 100).round() * 100;
+    targets.add(_SavingsTarget(category, current, target, current - target));
+  }
+  return targets.isEmpty ? null : targets;
 }
 
 /// Period codes (the `query_transactions` enum) rendered in words for the card.

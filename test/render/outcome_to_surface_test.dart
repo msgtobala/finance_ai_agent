@@ -6,6 +6,7 @@ import 'package:finance_ai_assistant/render/catalog/capability_info_card.dart';
 import 'package:finance_ai_assistant/render/catalog/category_figure_card.dart';
 import 'package:finance_ai_assistant/render/catalog/confirmation_card.dart';
 import 'package:finance_ai_assistant/render/catalog/reminder_status_card.dart';
+import 'package:finance_ai_assistant/render/catalog/savings_plan_card.dart';
 import 'package:finance_ai_assistant/render/catalog/spending_summary_card.dart';
 import 'package:finance_ai_assistant/render/outcome_to_surface.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -248,14 +249,82 @@ void main() {
     expect(root.properties['limitation'], isNotNull);
   });
 
-  test('savingsPlan (no card yet) -> no components', () {
+  test('savingsPlan (Beat 5) -> one SavingsPlanCard with deterministic targets',
+      () {
+    // query + summarize ran → spending available → a plan can be composed.
+    final outcome = spendingOutcome();
+    final planOutcome = AgentOutcome(
+      userText: 'Give me a plan to spend less next month.',
+      answerText: '',
+      steps: const [],
+      effects: outcome.effects,
+      kind: OutcomeKind.savingsPlan,
+    );
+
+    final root = surfaceComponentsFor(planOutcome).single;
+    expect(root.type, kSavingsPlanCardName);
+    expect(root.properties['recurrence'], 'monthly');
+
+    final targets =
+        (root.properties['targets'] as List).cast<Map<String, Object?>>();
+    // Discretionary categories only (food, shopping, entertainment) — not bills
+    // or transport.
+    expect(targets.map((t) => t['category']),
+        ['food', 'shopping', 'entertainment']);
+    final food = targets.firstWhere((t) => t['category'] == 'food');
+    expect(food['current'], 14800);
+    expect(food['target'], 12600); // 15% cut, rounded to ₹100
+    expect(food['saving'], 2200);
+  });
+
+  test('savingsPlan with no spending data -> no components', () {
     final outcome = AgentOutcome(
-      userText: '',
+      userText: 'plan to spend less',
       answerText: 'x',
       steps: const [],
       effects: const [],
       kind: OutcomeKind.savingsPlan,
     );
     expect(surfaceComponentsFor(outcome), isEmpty);
+  });
+
+  test('reminderUpdated with several reminder effects -> one card each (Beat 5 '
+      'chain-back)', () {
+    final outcome = AgentOutcome(
+      userText: 'Yes, set monthly reminders for food, shopping and entertainment.',
+      answerText: 'Done.',
+      steps: const [],
+      effects: const [
+        ToolEffect(
+          tool: 'set_budget_reminder',
+          input: {'category': 'food', 'recurrence': 'monthly'},
+          data: {
+            'title': 'Review food spending',
+            'category': 'food',
+            'recurrence': 'monthly',
+            'status': 'created',
+          },
+          isError: false,
+        ),
+        ToolEffect(
+          tool: 'set_budget_reminder',
+          input: {'category': 'shopping', 'recurrence': 'monthly'},
+          data: {
+            'title': 'Review shopping spending',
+            'category': 'shopping',
+            'recurrence': 'monthly',
+            'status': 'created',
+          },
+          isError: false,
+        ),
+      ],
+      kind: OutcomeKind.reminderUpdated,
+    );
+
+    final components = surfaceComponentsFor(outcome);
+    expect(components, hasLength(2));
+    expect(components.every((c) => c.type == kReminderStatusCardName), isTrue);
+    expect(components[0].properties['category'], 'food');
+    expect(components[1].properties['category'], 'shopping');
   });
 }

@@ -11,6 +11,7 @@ import 'package:finance_ai_assistant/render/catalog/aria_catalog.dart';
 import 'package:finance_ai_assistant/render/catalog/capability_info_card.dart';
 import 'package:finance_ai_assistant/render/catalog/category_figure_card.dart';
 import 'package:finance_ai_assistant/render/catalog/confirmation_card.dart';
+import 'package:finance_ai_assistant/render/catalog/savings_plan_card.dart';
 import 'package:finance_ai_assistant/render/catalog/spending_summary_card.dart';
 import 'package:finance_ai_assistant/render/dispatch_bridge.dart';
 import 'package:finance_ai_assistant/render/outcome_to_surface.dart';
@@ -106,6 +107,55 @@ void main() {
       ariaCatalog.items.any((i) => i.name == kCapabilityInfoCardName),
       isTrue,
     );
+  });
+
+  test('ariaCatalog exposes SavingsPlanCard', () {
+    expect(
+      ariaCatalog.items.any((i) => i.name == kSavingsPlanCardName),
+      isTrue,
+    );
+  });
+
+  test('Beat 5 SavingsPlanCard payload validates on a real SurfaceController',
+      () async {
+    final controller = SurfaceController(catalogs: [ariaCatalog]);
+    final errors = <Object>[];
+    final sub = controller.onSubmit.listen(errors.add);
+
+    final outcome = AgentOutcome(
+      userText: 'Give me a plan to spend less next month.',
+      answerText: '',
+      steps: const [],
+      effects: const [
+        ToolEffect(
+          tool: 'summarize_spending',
+          input: {},
+          data: {
+            'byCategory': {
+              'food': 14800,
+              'bills': 13000,
+              'shopping': 9500,
+              'entertainment': 6800,
+              'transport': 3100,
+            },
+            'total': 47200,
+            'topCategory': 'food',
+          },
+          isError: false,
+        ),
+      ],
+      kind: OutcomeKind.savingsPlan,
+    );
+
+    _renderInto(controller, outcome, 'plan');
+    await Future<void>.delayed(Duration.zero);
+
+    expect(controller.activeSurfaceIds, contains('plan'));
+    final definition = controller.registry.getSurface('plan');
+    expect(definition?.components['root']?.type, kSavingsPlanCardName);
+    expect(errors, isEmpty); // no validation error
+
+    await sub.cancel();
   });
 
   test('Beat 4 CapabilityInfoCard payload validates on a real SurfaceController',

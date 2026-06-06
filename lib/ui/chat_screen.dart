@@ -11,6 +11,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:genui/genui.dart';
 
+import '../demo/demo_mode.dart';
 import 'providers.dart';
 import 'reasoning_trace.dart';
 
@@ -60,8 +61,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     });
     ref.read(rendererProvider).clear();
 
-    // Stage 1 — reasoning.
-    final outcome = await ref.read(agentServiceProvider).runTurn(input);
+    // Stage 1 — reasoning. Scripted or live per demoMode (default scripted).
+    final outcome = await ref.read(activeAgentProvider).runTurn(input);
 
     // Stream the reasoning trace with pacing (the hero visual).
     await ref.read(reasoningTraceProvider.notifier).play(outcome.steps);
@@ -82,8 +83,41 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   @override
   Widget build(BuildContext context) {
     final renderer = ref.read(rendererProvider);
+    final mode = ref.watch(demoModeProvider);
     return Scaffold(
-      appBar: AppBar(title: const Text('Aria')),
+      appBar: AppBar(
+        title: const Text('Aria'),
+        actions: [
+          // Demo-mode toggle (ARCHITECTURE §9). Scripted is the talk default;
+          // live is one tap away. Switching clears the live agent's memory so a
+          // later live turn starts on a clean thread.
+          Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: SegmentedButton<DemoMode>(
+              segments: const [
+                ButtonSegment(
+                  value: DemoMode.scripted,
+                  label: Text('Scripted'),
+                  icon: Icon(Icons.theaters_outlined),
+                ),
+                ButtonSegment(
+                  value: DemoMode.live,
+                  label: Text('Live'),
+                  icon: Icon(Icons.bolt_outlined),
+                ),
+              ],
+              selected: {mode},
+              showSelectedIcon: false,
+              onSelectionChanged: _running
+                  ? null
+                  : (selection) {
+                      ref.read(demoModeProvider.notifier).set(selection.first);
+                      ref.read(agentServiceProvider).resetMemory();
+                    },
+            ),
+          ),
+        ],
+      ),
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(16),

@@ -11,6 +11,17 @@ import 'tools/set_budget_reminder.dart';
 import 'tools/summarize_spending.dart';
 import 'tools/update_budget_reminder.dart';
 
+/// A runnable Stage-1 turn handler. Both the live [AgentService] and the
+/// [ScriptedAgentService] (demo mode) implement this, so the UI can hold either
+/// behind `activeAgentProvider` and call it the same way.
+abstract interface class AgentRunner {
+  /// Run one user turn through Stage 1 and return the structured [AgentOutcome].
+  Future<AgentOutcome> runTurn(String input);
+
+  /// Clear conversation memory (e.g. to restart the demo or switch modes).
+  Future<void> resetMemory();
+}
+
 /// The complete Stage-1 tool set — this list IS the sandbox boundary.
 ///
 /// There is deliberately NO delete / wipe tool here, and nothing pattern-matches
@@ -35,7 +46,7 @@ List<Tool> buildAriaTools({
 /// so `ConversationBufferMemory` accumulates across turns (Beat 3 resolves "make
 /// it weekly" against earlier context). Gemini is reached through Firebase
 /// (vertexAI backend), temperature 0 for stage determinism.
-class AgentService {
+class AgentService implements AgentRunner {
   AgentService({
     required TransactionRepo repo,
     required CalendarService calendar,
@@ -83,6 +94,7 @@ class AgentService {
   /// seam Stage 2 renders from (ARCHITECTURE.md §3.4). Never throws — on failure
   /// it returns a benign outcome (empty effects ⇒ `capabilityInfo`) so the demo
   /// can't hard-crash on stage.
+  @override
   Future<AgentOutcome> runTurn(String input) async {
     try {
       final result = await _executor.invoke({'input': input});
@@ -106,5 +118,6 @@ class AgentService {
   }
 
   /// Clear conversation memory (e.g. to restart the demo from Beat 1).
+  @override
   Future<void> resetMemory() => _memory.clear();
 }

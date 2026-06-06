@@ -27,6 +27,31 @@ void main() {
     expect(turn, contains('Review food spending'));
   });
 
+  test('set_savings_reminders action → a turn naming each category', () {
+    final turn = confirmTurnForInteraction(interaction({
+      'name': 'set_savings_reminders',
+      'sourceComponentId': 'root',
+      'context': {
+        'categories': 'food,shopping,entertainment',
+        'recurrence': 'monthly',
+      },
+    }));
+
+    expect(turn, isNotNull);
+    expect(turn, contains('monthly'));
+    expect(turn, contains('food'));
+    expect(turn, contains('shopping'));
+    expect(turn, contains('entertainment'));
+  });
+
+  test('set_savings_reminders with no accepted categories → null', () {
+    final turn = confirmTurnForInteraction(interaction({
+      'name': 'set_savings_reminders',
+      'context': {'categories': '', 'recurrence': 'monthly'},
+    }));
+    expect(turn, isNull);
+  });
+
   test('an error message on the same stream → null', () {
     final errorMsg = jsonEncode({
       'version': 'v0.9',
